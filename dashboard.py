@@ -11,7 +11,7 @@ import streamlit as st
 from datetime import datetime
 
 # ── Configuración ──────────────────────────────────────────────────────────────
-API_TOKEN         = st.secrets["BASEROW_TOKEN"]   # en Streamlit Cloud usar secrets
+API_TOKEN         = st.secrets["BASEROW_TOKEN"]
 BASE_URL          = "https://api.baserow.io"
 TABLE_PRODUCTOS   = 995855
 TABLE_MOVIMIENTOS = 995860
@@ -23,7 +23,7 @@ HEADERS = {
 
 # ── Carga de datos ─────────────────────────────────────────────────────────────
 
-@st.cache_data(ttl=300)   # refresca cada 5 minutos
+@st.cache_data(ttl=300)
 def cargar_tabla(table_id: int) -> pd.DataFrame:
     filas, pagina = [], 1
     while True:
@@ -61,8 +61,12 @@ def preparar_datos():
         "field_8790687": "producto",
         "field_8790782": "cantidad_movimiento",
         "field_8790788": "tipo_movimiento",
-        "field_8790800": "fecha_movimiento",   # ajusta este field_id si cambia
     })
+
+    # Buscar columna de fecha automáticamente
+    fecha_col = [c for c in movimientos.columns if "fecha" in c.lower()]
+    if fecha_col:
+        movimientos = movimientos.rename(columns={fecha_col[0]: "fecha_movimiento"})
 
     # Limpiar link rows
     movimientos["producto"] = movimientos["producto"].apply(
@@ -72,18 +76,22 @@ def preparar_datos():
         lambda x: x["value"] if isinstance(x, dict) and x else None
     )
 
-    # Fecha y cantidad neta
+    # Convertir cantidad a número
+    movimientos["cantidad_movimiento"] = pd.to_numeric(
+        movimientos["cantidad_movimiento"], errors="coerce"
+    ).fillna(0)
+
+    # Fecha y mes
     if "fecha_movimiento" in movimientos.columns:
         movimientos["fecha_movimiento"] = pd.to_datetime(
             movimientos["fecha_movimiento"], errors="coerce"
         )
         movimientos["mes"] = movimientos["fecha_movimiento"].dt.to_period("M").astype(str)
 
+    # Cantidad neta (entradas suman, salidas restan)
     movimientos["cantidad_neta"] = movimientos.apply(
-        lambda x: x["cantidad_movimiento"]
-        if x["tipo_movimiento"] == "Entrada"
-        else -x["cantidad_movimiento"]
-        if x["tipo_movimiento"] == "Salida"
+        lambda x: x["cantidad_movimiento"]  if x["tipo_movimiento"] == "Entrada"
+        else     -x["cantidad_movimiento"]  if x["tipo_movimiento"] == "Salida"
         else 0,
         axis=1,
     )
@@ -99,18 +107,18 @@ st.set_page_config(
     layout="wide",
 )
 
-# Estilo
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=DM+Mono&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     .metric-card {
         background: #f8f9fb;
         border-radius: 12px;
         padding: 1.2rem 1.5rem;
         border-left: 4px solid #2563eb;
+        margin-bottom: 0.5rem;
     }
-    .metric-card h3 { font-size: 0.8rem; color: #6b7280; margin: 0; text-transform: uppercase; letter-spacing: .05em; }
+    .metric-card h3 { font-size: 0.78rem; color: #6b7280; margin: 0; text-transform: uppercase; letter-spacing: .06em; }
     .metric-card p  { font-size: 2rem; font-weight: 700; color: #111827; margin: 0; }
 </style>
 """, unsafe_allow_html=True)
@@ -208,6 +216,9 @@ if "mes" in df.columns:
 
 # ── Tabla detalle ──────────────────────────────────────────────────────────────
 st.subheader("Detalle de movimientos")
-cols_show = [c for c in ["fecha_movimiento","producto","bodega","tipo_movimiento","cantidad_movimiento","observaciones"] if c in df.columns]
-st.dataframe(df[cols_show].sort_values("fecha_movimiento", ascending=False) if "fecha_movimiento" in df.columns else df[cols_show],
-             use_container_width=True, hide_index=True)
+cols_show = [c for c in ["fecha_movimiento", "producto", "bodega", "tipo_movimiento",
+                          "cantidad_movimiento", "observaciones"] if c in df.columns]
+df_show = df[cols_show]
+if "fecha_movimiento" in df_show.columns:
+    df_show = df_show.sort_values("fecha_movimiento", ascending=False)
+st.dataframe(df_show, use_container_width=True, hide_index=True)
