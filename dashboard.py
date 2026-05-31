@@ -196,6 +196,18 @@ fig_stock.update_layout(
 )
 st.plotly_chart(fig_stock, use_container_width=True)
 
+# ── Tabla stock por bodega (sin filtros) ──────────────────────────────────────
+st.subheader("Stock acumulado por bodega")
+stock_bodega_total = (
+    movimientos.groupby(["bodega", "producto"])["cantidad_neta"]
+    .sum().reset_index()
+    .rename(columns={"cantidad_neta": "stock"})
+    .pivot_table(index="producto", columns="bodega", values="stock", aggfunc="sum", fill_value=0)
+    .reset_index()
+)
+stock_bodega_total["Total"] = stock_bodega_total.iloc[:, 1:].sum(axis=1)
+st.dataframe(stock_bodega_total, use_container_width=True, hide_index=True)
+
 # ── Tabla detalle ──────────────────────────────────────────────────────────────
 st.subheader("Detalle de movimientos")
 cols_show = [c for c in ["fecha_movimiento", "producto", "bodega", "tipo_movimiento",
