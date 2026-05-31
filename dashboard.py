@@ -58,12 +58,8 @@ def preparar_datos():
         "field_8790687": "producto",
         "field_8790782": "cantidad_movimiento",
         "field_8790788": "tipo_movimiento",
+        "field_8795095": "fecha_movimiento",
     })
-
-    # Detectar columna fecha
-    fecha_col = [c for c in movimientos.columns if "fecha" in c.lower()]
-    if fecha_col:
-        movimientos = movimientos.rename(columns={fecha_col[0]: "fecha_movimiento"})
 
     # Limpiar link rows
     movimientos["producto"] = movimientos["producto"].apply(
