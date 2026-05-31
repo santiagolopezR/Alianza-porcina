@@ -153,49 +153,6 @@ c2.markdown(f'<div class="metric-card"><h3>Productos</h3><p>{n_productos}</p></d
 
 st.divider()
 
-# ── Gráficas ───────────────────────────────────────────────────────────────────
-
-# 1. Entradas y salidas por producto y mes (barras agrupadas)
-st.subheader("Entradas y salidas por producto")
-ent_sal = (
-    df.groupby(["mes", "producto", "tipo_movimiento"])["cantidad_movimiento"]
-    .sum().reset_index()
-)
-fig_ent_sal = px.bar(
-    ent_sal, x="producto", y="cantidad_movimiento",
-    color="tipo_movimiento", barmode="group",
-    facet_col="mes",
-    color_discrete_map={"Entrada": "#2563eb", "Salida": "#ef4444"},
-    template="plotly_white",
-    labels={"cantidad_movimiento": "Cantidad", "producto": "Producto"},
-)
-fig_ent_sal.update_layout(margin=dict(l=0, r=0, t=40, b=0), legend_title="Tipo")
-fig_ent_sal.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
-st.plotly_chart(fig_ent_sal, use_container_width=True)
-
-# 2. Stock acumulado hoy por producto (barras horizontales)
-st.subheader("Stock actual por producto")
-stock_hoy = (
-    df.groupby("producto")["cantidad_neta"]
-    .sum().reset_index()
-    .rename(columns={"cantidad_neta": "stock"})
-    .sort_values("stock", ascending=True)
-)
-fig_stock = px.bar(
-    stock_hoy, x="stock", y="producto", orientation="h",
-    color="stock",
-    color_continuous_scale=["#ef4444", "#f59e0b", "#22c55e"],
-    template="plotly_white",
-    labels={"stock": "Stock", "producto": "Producto"},
-    text="stock",
-)
-fig_stock.update_traces(textposition="outside")
-fig_stock.update_layout(
-    coloraxis_showscale=False,
-    margin=dict(l=0, r=40, t=10, b=0),
-)
-st.plotly_chart(fig_stock, use_container_width=True)
-
 # ── Tabla stock por bodega (sin filtros) ──────────────────────────────────────
 st.subheader("Stock acumulado por bodega")
 stock_bodega_total = (
