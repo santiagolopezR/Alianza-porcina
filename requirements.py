@@ -2,4 +2,4 @@ streamlit
 requests
 pandas
 plotly
-plotly-express
+plotly-express as px
