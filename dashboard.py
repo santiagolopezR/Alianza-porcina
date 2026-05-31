@@ -155,61 +155,46 @@ st.divider()
 
 # ── Gráficas ───────────────────────────────────────────────────────────────────
 
-# Fila 1: torta productos por bodega + barras entradas/salidas por mes
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("Productos por bodega")
-    prod_bodega = (
-        df.groupby(["bodega", "producto"])["cantidad_neta"]
-        .sum().reset_index()
-        .rename(columns={"cantidad_neta": "stock"})
-        .query("stock > 0")
-    )
-    fig_torta = px.sunburst(
-        prod_bodega,
-        path=["bodega", "producto"],
-        values="stock",
-        color_discrete_sequence=px.colors.sequential.Blues_r,
-        template="plotly_white",
-    )
-    fig_torta.update_layout(margin=dict(l=0, r=0, t=10, b=0))
-    st.plotly_chart(fig_torta, use_container_width=True)
-
-with col2:
-    st.subheader("Movimientos por mes")
-    mensual = (
-        df.groupby(["mes", "tipo_movimiento"])["cantidad_movimiento"]
-        .sum().reset_index()
-    )
-    fig_mens = px.bar(
-        mensual, x="mes", y="cantidad_movimiento", color="tipo_movimiento",
-        barmode="group",
-        color_discrete_map={"Entrada": "#2563eb", "Salida": "#ef4444"},
-        template="plotly_white",
-        labels={"cantidad_movimiento": "Cantidad", "mes": "Mes"},
-    )
-    fig_mens.update_layout(margin=dict(l=0, r=0, t=10, b=0))
-    st.plotly_chart(fig_mens, use_container_width=True)
-
-# Fila 2: stock acumulado por producto en el tiempo
-st.subheader("Stock acumulado por producto")
-stock_mes = (
-    df.groupby(["mes", "producto"])["cantidad_neta"]
+# 1. Entradas y salidas por producto y mes (barras agrupadas)
+st.subheader("Entradas y salidas por producto")
+ent_sal = (
+    df.groupby(["mes", "producto", "tipo_movimiento"])["cantidad_movimiento"]
     .sum().reset_index()
-    .sort_values(["producto", "mes"])
 )
-stock_mes["stock_acumulado"] = stock_mes.groupby("producto")["cantidad_neta"].cumsum()
-
-fig_acum = px.line(
-    stock_mes, x="mes", y="stock_acumulado", color="producto",
-    markers=True,
+fig_ent_sal = px.bar(
+    ent_sal, x="producto", y="cantidad_movimiento",
+    color="tipo_movimiento", barmode="group",
+    facet_col="mes",
+    color_discrete_map={"Entrada": "#2563eb", "Salida": "#ef4444"},
     template="plotly_white",
-    labels={"stock_acumulado": "Stock", "mes": "Mes", "producto": "Producto"},
+    labels={"cantidad_movimiento": "Cantidad", "producto": "Producto"},
 )
-fig_acum.update_traces(line=dict(width=2.5), marker=dict(size=8))
-fig_acum.update_layout(margin=dict(l=0, r=0, t=10, b=0))
-st.plotly_chart(fig_acum, use_container_width=True)
+fig_ent_sal.update_layout(margin=dict(l=0, r=0, t=40, b=0), legend_title="Tipo")
+fig_ent_sal.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+st.plotly_chart(fig_ent_sal, use_container_width=True)
+
+# 2. Stock acumulado hoy por producto (barras horizontales)
+st.subheader("Stock actual por producto")
+stock_hoy = (
+    df.groupby("producto")["cantidad_neta"]
+    .sum().reset_index()
+    .rename(columns={"cantidad_neta": "stock"})
+    .sort_values("stock", ascending=True)
+)
+fig_stock = px.bar(
+    stock_hoy, x="stock", y="producto", orientation="h",
+    color="stock",
+    color_continuous_scale=["#ef4444", "#f59e0b", "#22c55e"],
+    template="plotly_white",
+    labels={"stock": "Stock", "producto": "Producto"},
+    text="stock",
+)
+fig_stock.update_traces(textposition="outside")
+fig_stock.update_layout(
+    coloraxis_showscale=False,
+    margin=dict(l=0, r=40, t=10, b=0),
+)
+st.plotly_chart(fig_stock, use_container_width=True)
 
 # ── Tabla detalle ──────────────────────────────────────────────────────────────
 st.subheader("Detalle de movimientos")
