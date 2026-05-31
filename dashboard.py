@@ -22,7 +22,7 @@ HEADERS = {
 
 # ── Carga de datos ─────────────────────────────────────────────────────────────
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def cargar_tabla(table_id: int) -> pd.DataFrame:
     filas, pagina = [], 1
     while True:
@@ -115,7 +115,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📦 Inventario de Bodegas")
-st.caption(f"Actualización automática cada 5 min · {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+st.caption(f"Actualización automática cada 60 seg · {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+
+if st.button("🔄 Actualizar datos"):
+    st.cache_data.clear()
+    st.rerun()
 
 with st.spinner("Cargando datos desde Baserow..."):
     try:
