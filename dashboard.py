@@ -44,7 +44,6 @@ def preparar_datos():
     productos   = cargar_tabla(TABLE_PRODUCTOS)
     movimientos = cargar_tabla(TABLE_MOVIMIENTOS)
 
-    # Renombrar productos
     productos = productos.rename(columns={
         "field_8720901": "codigo_producto",
         "field_8720903": "active",
@@ -52,7 +51,6 @@ def preparar_datos():
         "field_8790688": "movimientos_link",
     })
 
-    # Renombrar movimientos
     movimientos = movimientos.rename(columns={
         "field_8720938": "id_movimiento",
         "field_8720939": "observaciones",
@@ -62,7 +60,7 @@ def preparar_datos():
         "field_8790788": "tipo_movimiento",
     })
 
-    # Detectar columna fecha automáticamente
+    # Detectar columna fecha
     fecha_col = [c for c in movimientos.columns if "fecha" in c.lower()]
     if fecha_col:
         movimientos = movimientos.rename(columns={fecha_col[0]: "fecha_movimiento"})
@@ -75,19 +73,17 @@ def preparar_datos():
         lambda x: x["value"] if isinstance(x, dict) and x else None
     )
 
-    # Convertir cantidad a número
+    # Cantidad a número
     movimientos["cantidad_movimiento"] = pd.to_numeric(
         movimientos["cantidad_movimiento"], errors="coerce"
     ).fillna(0)
 
-    # Fecha y mes
-    if "fecha_movimiento" in movimientos.columns:
-        movimientos["fecha_movimiento"] = pd.to_datetime(
-            movimientos["fecha_movimiento"], errors="coerce"
-        )
-        movimientos["mes"] = movimientos["fecha_movimiento"].dt.to_period("M").astype(str)
+    # Fecha, mes y cantidad neta
+    movimientos["fecha_movimiento"] = pd.to_datetime(
+        movimientos["fecha_movimiento"], errors="coerce"
+    )
+    movimientos["mes"] = movimientos["fecha_movimiento"].dt.to_period("M").astype(str)
 
-    # Cantidad neta
     movimientos["cantidad_neta"] = movimientos.apply(
         lambda x:  x["cantidad_movimiento"] if x["tipo_movimiento"] == "Entrada"
         else      -x["cantidad_movimiento"] if x["tipo_movimiento"] == "Salida"
@@ -159,23 +155,28 @@ st.divider()
 
 # ── Gráficas ───────────────────────────────────────────────────────────────────
 
-# Stock por bodega (torta)
-st.subheader("Stock por bodega")
-stock_bodega = (
-    df.groupby("bodega")["cantidad_neta"].sum()
-    .reset_index()
-    .rename(columns={"cantidad_neta": "stock"})
-)
-fig_bodega = px.pie(
-    stock_bodega, names="bodega", values="stock",
-    color_discrete_sequence=px.colors.sequential.Blues_r,
-    template="plotly_white",
-)
-fig_bodega.update_layout(margin=dict(l=0, r=0, t=10, b=0))
-st.plotly_chart(fig_bodega, use_container_width=True)
+# Fila 1: torta productos por bodega + barras entradas/salidas por mes
+col1, col2 = st.columns(2)
 
-# Evolución mensual de movimientos (barras agrupadas)
-if "mes" in df.columns:
+with col1:
+    st.subheader("Productos por bodega")
+    prod_bodega = (
+        df.groupby(["bodega", "producto"])["cantidad_neta"]
+        .sum().reset_index()
+        .rename(columns={"cantidad_neta": "stock"})
+        .query("stock > 0")
+    )
+    fig_torta = px.sunburst(
+        prod_bodega,
+        path=["bodega", "producto"],
+        values="stock",
+        color_discrete_sequence=px.colors.sequential.Blues_r,
+        template="plotly_white",
+    )
+    fig_torta.update_layout(margin=dict(l=0, r=0, t=10, b=0))
+    st.plotly_chart(fig_torta, use_container_width=True)
+
+with col2:
     st.subheader("Movimientos por mes")
     mensual = (
         df.groupby(["mes", "tipo_movimiento"])["cantidad_movimiento"]
@@ -191,32 +192,28 @@ if "mes" in df.columns:
     fig_mens.update_layout(margin=dict(l=0, r=0, t=10, b=0))
     st.plotly_chart(fig_mens, use_container_width=True)
 
-    # Stock acumulado por producto en el tiempo
-    st.subheader("Stock acumulado por producto")
-    stock_tiempo = (
-        df.groupby(["mes", "producto"])["cantidad_neta"]
-        .sum()
-        .reset_index()
-        .sort_values("mes")
-    )
-    # Acumular por producto
-    stock_tiempo["stock_acumulado"] = (
-        stock_tiempo.groupby("producto")["cantidad_neta"].cumsum()
-    )
-    fig_acum = px.line(
-        stock_tiempo, x="mes", y="stock_acumulado", color="producto",
-        markers=True,
-        template="plotly_white",
-        labels={"stock_acumulado": "Stock", "mes": "Mes", "producto": "Producto"},
-    )
-    fig_acum.update_layout(margin=dict(l=0, r=0, t=10, b=0))
-    st.plotly_chart(fig_acum, use_container_width=True)
+# Fila 2: stock acumulado por producto en el tiempo
+st.subheader("Stock acumulado por producto")
+stock_mes = (
+    df.groupby(["mes", "producto"])["cantidad_neta"]
+    .sum().reset_index()
+    .sort_values(["producto", "mes"])
+)
+stock_mes["stock_acumulado"] = stock_mes.groupby("producto")["cantidad_neta"].cumsum()
+
+fig_acum = px.line(
+    stock_mes, x="mes", y="stock_acumulado", color="producto",
+    markers=True,
+    template="plotly_white",
+    labels={"stock_acumulado": "Stock", "mes": "Mes", "producto": "Producto"},
+)
+fig_acum.update_traces(line=dict(width=2.5), marker=dict(size=8))
+fig_acum.update_layout(margin=dict(l=0, r=0, t=10, b=0))
+st.plotly_chart(fig_acum, use_container_width=True)
 
 # ── Tabla detalle ──────────────────────────────────────────────────────────────
 st.subheader("Detalle de movimientos")
 cols_show = [c for c in ["fecha_movimiento", "producto", "bodega", "tipo_movimiento",
                           "cantidad_movimiento", "observaciones"] if c in df.columns]
-df_show = df[cols_show]
-if "fecha_movimiento" in df_show.columns:
-    df_show = df_show.sort_values("fecha_movimiento", ascending=False)
+df_show = df[cols_show].sort_values("fecha_movimiento", ascending=False)
 st.dataframe(df_show, use_container_width=True, hide_index=True)
