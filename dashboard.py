@@ -149,7 +149,8 @@ if prod_sel != "Todos":
     df = df[df["producto"] == prod_sel]
 
 # ── KPIs ───────────────────────────────────────────────────────────────────────
-
+total_entradas = df[df["tipo_movimiento"] == "Entrada"]["cantidad_movimiento"].sum()
+total_salidas  = df[df["tipo_movimiento"] == "Salida"]["cantidad_movimiento"].sum()
 stock_actual   = total_entradas - total_salidas
 n_productos    = productos.shape[0]
 
