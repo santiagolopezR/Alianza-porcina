@@ -154,7 +154,7 @@ c2.markdown(f'<div class="metric-card"><h3>Productos</h3><p>{n_productos}</p></d
 st.divider()
 
 # ── Tabla stock por bodega (sin filtros) ──────────────────────────────────────
-st.subheader("Stock acumulado por bodega")
+st.subheader("Stock acumulado por bodega HOY")
 stock_bodega_total = (
     movimientos.groupby(["bodega", "producto"])["cantidad_neta"]
     .sum().reset_index()
