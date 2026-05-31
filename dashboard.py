@@ -6,7 +6,6 @@ Streamlit Community Cloud
 import requests
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import streamlit as st
 from datetime import datetime
 
@@ -63,7 +62,7 @@ def preparar_datos():
         "field_8790788": "tipo_movimiento",
     })
 
-    # Buscar columna de fecha automáticamente
+    # Detectar columna fecha automáticamente
     fecha_col = [c for c in movimientos.columns if "fecha" in c.lower()]
     if fecha_col:
         movimientos = movimientos.rename(columns={fecha_col[0]: "fecha_movimiento"})
@@ -88,10 +87,10 @@ def preparar_datos():
         )
         movimientos["mes"] = movimientos["fecha_movimiento"].dt.to_period("M").astype(str)
 
-    # Cantidad neta (entradas suman, salidas restan)
+    # Cantidad neta
     movimientos["cantidad_neta"] = movimientos.apply(
-        lambda x: x["cantidad_movimiento"]  if x["tipo_movimiento"] == "Entrada"
-        else     -x["cantidad_movimiento"]  if x["tipo_movimiento"] == "Salida"
+        lambda x:  x["cantidad_movimiento"] if x["tipo_movimiento"] == "Entrada"
+        else      -x["cantidad_movimiento"] if x["tipo_movimiento"] == "Salida"
         else 0,
         axis=1,
     )
@@ -149,70 +148,69 @@ if prod_sel != "Todos":
     df = df[df["producto"] == prod_sel]
 
 # ── KPIs ───────────────────────────────────────────────────────────────────────
-total_entradas = df[df["tipo_movimiento"] == "Entrada"]["cantidad_movimiento"].sum()
-total_salidas  = df[df["tipo_movimiento"] == "Salida"]["cantidad_movimiento"].sum()
-stock_actual   = total_entradas - total_salidas
-n_productos    = productos.shape[0]
+stock_actual = df["cantidad_neta"].sum()
+n_productos  = productos.shape[0]
 
-c1, c2, c3, c4 = st.columns(4)
+c1, c2 = st.columns(2)
 c1.markdown(f'<div class="metric-card"><h3>Stock actual</h3><p>{stock_actual:,.0f}</p></div>', unsafe_allow_html=True)
-c2.markdown(f'<div class="metric-card"><h3>Total entradas</h3><p>{total_entradas:,.0f}</p></div>', unsafe_allow_html=True)
-c3.markdown(f'<div class="metric-card"><h3>Total salidas</h3><p>{total_salidas:,.0f}</p></div>', unsafe_allow_html=True)
-c4.markdown(f'<div class="metric-card"><h3>Productos</h3><p>{n_productos}</p></div>', unsafe_allow_html=True)
+c2.markdown(f'<div class="metric-card"><h3>Productos</h3><p>{n_productos}</p></div>', unsafe_allow_html=True)
 
 st.divider()
 
 # ── Gráficas ───────────────────────────────────────────────────────────────────
-col1, col2 = st.columns(2)
 
-with col1:
-    st.subheader("Stock por producto")
-    stock_prod = (
-        df.groupby("producto")["cantidad_neta"].sum()
-        .reset_index()
-        .rename(columns={"cantidad_neta": "stock"})
-        .sort_values("stock", ascending=True)
-    )
-    fig1 = px.bar(
-        stock_prod, x="stock", y="producto", orientation="h",
-        color="stock", color_continuous_scale="Blues",
-        template="plotly_white",
-    )
-    fig1.update_layout(showlegend=False, coloraxis_showscale=False,
-                       margin=dict(l=0, r=0, t=10, b=0))
-    st.plotly_chart(fig1, use_container_width=True)
+# Stock por bodega (torta)
+st.subheader("Stock por bodega")
+stock_bodega = (
+    df.groupby("bodega")["cantidad_neta"].sum()
+    .reset_index()
+    .rename(columns={"cantidad_neta": "stock"})
+)
+fig_bodega = px.pie(
+    stock_bodega, names="bodega", values="stock",
+    color_discrete_sequence=px.colors.sequential.Blues_r,
+    template="plotly_white",
+)
+fig_bodega.update_layout(margin=dict(l=0, r=0, t=10, b=0))
+st.plotly_chart(fig_bodega, use_container_width=True)
 
-with col2:
-    st.subheader("Stock por bodega")
-    stock_bodega = (
-        df.groupby("bodega")["cantidad_neta"].sum()
-        .reset_index()
-        .rename(columns={"cantidad_neta": "stock"})
-    )
-    fig2 = px.pie(
-        stock_bodega, names="bodega", values="stock",
-        color_discrete_sequence=px.colors.sequential.Blues_r,
-        template="plotly_white",
-    )
-    fig2.update_layout(margin=dict(l=0, r=0, t=10, b=0))
-    st.plotly_chart(fig2, use_container_width=True)
-
-# Evolución mensual
+# Evolución mensual de movimientos (barras agrupadas)
 if "mes" in df.columns:
     st.subheader("Movimientos por mes")
     mensual = (
         df.groupby(["mes", "tipo_movimiento"])["cantidad_movimiento"]
         .sum().reset_index()
     )
-    fig3 = px.bar(
+    fig_mens = px.bar(
         mensual, x="mes", y="cantidad_movimiento", color="tipo_movimiento",
         barmode="group",
         color_discrete_map={"Entrada": "#2563eb", "Salida": "#ef4444"},
         template="plotly_white",
         labels={"cantidad_movimiento": "Cantidad", "mes": "Mes"},
     )
-    fig3.update_layout(margin=dict(l=0, r=0, t=10, b=0))
-    st.plotly_chart(fig3, use_container_width=True)
+    fig_mens.update_layout(margin=dict(l=0, r=0, t=10, b=0))
+    st.plotly_chart(fig_mens, use_container_width=True)
+
+    # Stock acumulado por producto en el tiempo
+    st.subheader("Stock acumulado por producto")
+    stock_tiempo = (
+        df.groupby(["mes", "producto"])["cantidad_neta"]
+        .sum()
+        .reset_index()
+        .sort_values("mes")
+    )
+    # Acumular por producto
+    stock_tiempo["stock_acumulado"] = (
+        stock_tiempo.groupby("producto")["cantidad_neta"].cumsum()
+    )
+    fig_acum = px.line(
+        stock_tiempo, x="mes", y="stock_acumulado", color="producto",
+        markers=True,
+        template="plotly_white",
+        labels={"stock_acumulado": "Stock", "mes": "Mes", "producto": "Producto"},
+    )
+    fig_acum.update_layout(margin=dict(l=0, r=0, t=10, b=0))
+    st.plotly_chart(fig_acum, use_container_width=True)
 
 # ── Tabla detalle ──────────────────────────────────────────────────────────────
 st.subheader("Detalle de movimientos")
